@@ -33,19 +33,15 @@ jobs:
       - name: Verify Android SDK
         run: |
           echo "Checking Android SDK..."
-          if [ ! -d "$ANDROID_HOME" ]; then
-            echo "Android SDK not found"
-            exit 1
-          fi
+          test -d "$ANDROID_HOME" || exit 1
           ls "$ANDROID_HOME"
-          echo "Android SDK path verified"
 
       - name: Extract Project ZIP
         run: |
-          if [ ! -f "zee-weather.zip" ]; then
+          test -f zee-weather.zip || {
             echo "zee-weather.zip not found"
             exit 1
-          fi
+          }
 
           mkdir -p project
           unzip -q zee-weather.zip -d project
@@ -65,7 +61,7 @@ jobs:
       - name: Install Dependencies
         run: |
           cd "$PROJECT_DIR"
-          npm install
+          npm install --legacy-peer-deps
 
       - name: Build Web App
         run: |
