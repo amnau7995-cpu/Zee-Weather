@@ -11,6 +11,10 @@ jobs:
   build:
     runs-on: ubuntu-latest
 
+    env:
+      ANDROID_HOME: /usr/local/lib/android/sdk
+      ANDROID_SDK_ROOT: /usr/local/lib/android/sdk
+
     steps:
       - name: Checkout Repository
         uses: actions/checkout@v4
@@ -26,22 +30,33 @@ jobs:
           distribution: temurin
           java-version: '21'
 
-      - name: Setup Android SDK
-        uses: android-actions/setup-android@v3
-
-      - name: Install Android SDK packages
+      - name: Configure Android SDK
         run: |
-          sdkmanager "platform-tools" "platforms;android-35" "build-tools;35.0.0"
+          echo "ANDROID_HOME=$ANDROID_HOME" >> $GITHUB_ENV
+          echo "$ANDROID_HOME/platform-tools" >> $GITHUB_PATH
+          echo "$ANDROID_HOME/cmdline-tools/latest/bin" >> $GITHUB_PATH
 
-      - name: Extract ZEE WEATHER ZIP
-        run: |
-          if [ ! -f "./zee-weather.zip" ]; then
-            echo "ERROR: zee-weather.zip not found!"
+          if [ ! -f "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" ]; then
+            echo "ERROR: Android SDK command-line tools missing"
             exit 1
           fi
 
+          yes | sdkmanager --licenses || true
+
+          sdkmanager --install \
+            "platform-tools" \
+            "platforms;android-35" \
+            "build-tools;35.0.0"
+
+      - name: Extract ZIP
+        run: |
+          test -f zee-weather.zip || {
+            echo "zee-weather.zip not found"
+            exit 1
+          }
+
           mkdir -p project
-          unzip -q "./zee-weather.zip" -d project
+          unzip -q zee-weather.zip -d project
 
       - name: Locate Project
         run: |
@@ -49,12 +64,11 @@ jobs:
             -not -path '*/node_modules/*' | head -n 1)
 
           if [ -z "$PROJECT_FILE" ]; then
-            echo "ERROR: package.json not found in ZIP"
+            echo "package.json not found"
             exit 1
           fi
 
-          PROJECT_DIR=$(dirname "$PROJECT_FILE")
-          echo "PROJECT_DIR=$PROJECT_DIR" >> "$GITHUB_ENV"
+          echo "PROJECT_DIR=$(dirname "$PROJECT_FILE")" >> $GITHUB_ENV
 
       - name: Install Dependencies
         run: |
@@ -66,16 +80,9 @@ jobs:
           cd "$PROJECT_DIR"
           npm run build
 
-      - name: Setup Capacitor Android
+      - name: Prepare Capacitor
         run: |
           cd "$PROJECT_DIR"
-
-          if [ ! -f capacitor.config.ts ] && \
-             [ ! -f capacitor.config.json ] && \
-             [ ! -f capacitor.config.js ]; then
-            echo "ERROR: Capacitor config missing"
-            exit 1
-          fi
 
           if [ ! -d android ]; then
             npx cap add android
@@ -83,7 +90,7 @@ jobs:
 
           npx cap sync android
 
-      - name: Build Debug APK
+      - name: Build APK
         run: |
           cd "$PROJECT_DIR/android"
           chmod +x gradlew
