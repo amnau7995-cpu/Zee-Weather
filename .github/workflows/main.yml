@@ -30,19 +30,9 @@ jobs:
           distribution: temurin
           java-version: '21'
 
-      - name: Verify Android SDK
+      - name: Extract ZIP
         run: |
-          echo "Checking Android SDK..."
-          test -d "$ANDROID_HOME" || exit 1
-          ls "$ANDROID_HOME"
-
-      - name: Extract Project ZIP
-        run: |
-          test -f zee-weather.zip || {
-            echo "zee-weather.zip not found"
-            exit 1
-          }
-
+          test -f zee-weather.zip || exit 1
           mkdir -p project
           unzip -q zee-weather.zip -d project
 
@@ -63,12 +53,40 @@ jobs:
           cd "$PROJECT_DIR"
           npm install --legacy-peer-deps
 
+      - name: Check Capacitor
+        run: |
+          cd "$PROJECT_DIR"
+
+          if [ ! -f capacitor.config.ts ] && \
+             [ ! -f capacitor.config.json ] && \
+             [ ! -f capacitor.config.js ]; then
+            echo "Capacitor configuration is missing"
+            exit 1
+          fi
+
+          if [ ! -d node_modules/@capacitor/core ]; then
+            echo "Capacitor core is missing"
+            exit 1
+          fi
+
+      - name: Generate Fresh Android Project
+        run: |
+          cd "$PROJECT_DIR"
+
+          CAP_MAJOR=$(node -p "require('./node_modules/@capacitor/core/package.json').version.split('.')[0]")
+
+          npm install "@capacitor/android@^${CAP_MAJOR}" --legacy-peer-deps
+
+          rm -rf android
+
+          npx cap add android
+
       - name: Build Web App
         run: |
           cd "$PROJECT_DIR"
           npm run build
 
-      - name: Sync Android Project
+      - name: Sync Capacitor
         run: |
           cd "$PROJECT_DIR"
           npx cap sync android
