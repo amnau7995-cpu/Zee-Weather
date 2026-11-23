@@ -1,0 +1,97 @@
+name: Build ZEE WEATHER APK
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+      - master
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - name: Setup Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Install Android SDK packages
+        run: |
+          sdkmanager "platform-tools" "platforms;android-35" "build-tools;35.0.0"
+
+      - name: Extract ZEE WEATHER ZIP
+        run: |
+          if [ ! -f "./zee-weather.zip" ]; then
+            echo "ERROR: zee-weather.zip not found!"
+            exit 1
+          fi
+
+          mkdir -p project
+          unzip -q "./zee-weather.zip" -d project
+
+      - name: Locate Project
+        run: |
+          PROJECT_FILE=$(find project -name package.json \
+            -not -path '*/node_modules/*' | head -n 1)
+
+          if [ -z "$PROJECT_FILE" ]; then
+            echo "ERROR: package.json not found in ZIP"
+            exit 1
+          fi
+
+          PROJECT_DIR=$(dirname "$PROJECT_FILE")
+          echo "PROJECT_DIR=$PROJECT_DIR" >> "$GITHUB_ENV"
+
+      - name: Install Dependencies
+        run: |
+          cd "$PROJECT_DIR"
+          npm install
+
+      - name: Build Web App
+        run: |
+          cd "$PROJECT_DIR"
+          npm run build
+
+      - name: Setup Capacitor Android
+        run: |
+          cd "$PROJECT_DIR"
+
+          if [ ! -f capacitor.config.ts ] && \
+             [ ! -f capacitor.config.json ] && \
+             [ ! -f capacitor.config.js ]; then
+            echo "ERROR: Capacitor config missing"
+            exit 1
+          fi
+
+          if [ ! -d android ]; then
+            npx cap add android
+          fi
+
+          npx cap sync android
+
+      - name: Build Debug APK
+        run: |
+          cd "$PROJECT_DIR/android"
+          chmod +x gradlew
+          ./gradlew assembleDebug
+
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: ZEE-WEATHER-APK
+          path: ${{ env.PROJECT_DIR }}/android/app/build/outputs/apk/debug/app-debug.apk
+          if-no-files-found: error
