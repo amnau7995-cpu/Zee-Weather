@@ -9,7 +9,11 @@ on:
 
 jobs:
   build:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
+
+    env:
+      ANDROID_HOME: /usr/local/lib/android/sdk
+      ANDROID_SDK_ROOT: /usr/local/lib/android/sdk
 
     steps:
       - name: Checkout Repository
@@ -26,19 +30,20 @@ jobs:
           distribution: temurin
           java-version: '21'
 
-      - name: Setup Android SDK
-        uses: android-actions/setup-android@v3
-        with:
-          accept-android-sdk-licenses: true
-          packages: |
-            platform-tools
-            platforms;android-35
-            build-tools;35.0.0
+      - name: Verify Android SDK
+        run: |
+          echo "Checking Android SDK..."
+          if [ ! -d "$ANDROID_HOME" ]; then
+            echo "Android SDK not found"
+            exit 1
+          fi
+          ls "$ANDROID_HOME"
+          echo "Android SDK path verified"
 
-      - name: Extract ZEE WEATHER ZIP
+      - name: Extract Project ZIP
         run: |
           if [ ! -f "zee-weather.zip" ]; then
-            echo "ERROR: zee-weather.zip not found"
+            echo "zee-weather.zip not found"
             exit 1
           fi
 
@@ -51,7 +56,7 @@ jobs:
             -not -path '*/node_modules/*' | head -n 1)
 
           if [ -z "$PROJECT_FILE" ]; then
-            echo "ERROR: package.json not found"
+            echo "package.json not found"
             exit 1
           fi
 
@@ -67,17 +72,12 @@ jobs:
           cd "$PROJECT_DIR"
           npm run build
 
-      - name: Prepare Android
+      - name: Sync Android Project
         run: |
           cd "$PROJECT_DIR"
-
-          if [ ! -d android ]; then
-            npx cap add android
-          fi
-
           npx cap sync android
 
-      - name: Build Debug APK
+      - name: Build APK
         run: |
           cd "$PROJECT_DIR/android"
           chmod +x gradlew
